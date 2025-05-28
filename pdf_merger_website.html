@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Unificador de PDFs - Simples e Rápido</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #333;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            padding: 40px 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            font-weight: 300;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .main-content {
+            padding: 40px 30px;
+        }
+
+        .upload-section {
+            border: 3px dashed #667eea;
+            border-radius: 15px;
+            padding: 40px;
+            text-align: center;
+            margin-bottom: 30px;
+            transition: all 0.3s ease;
+            background: #f8f9ff;
+        }
+
+        .upload-section:hover {
+            border-color: #764ba2;
+            background: #f0f2ff;
+        }
+
+        .upload-section.dragover {
+            border-color: #764ba2;
+            background: #e8ebff;
+            transform: scale(1.02);
+        }
+
+        .upload-icon {
+            font-size: 3rem;
+            color: #667eea;
+            margin-bottom: 20px;
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        .upload-btn {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 50px;
+            font-size: 1.1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin: 10px;
+        }
+
+        .upload-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .file-list {
+            background: #f8f9ff;
+            border-radius: 15px;
+            padding: 20px;
+            margin: 20px 0;
+            min-height: 100px;
+        }
+
+        .file-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 15px;
+            margin: 5px 0;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+            transition: all 0.2s ease;
+        }
+
+        .file-item:hover {
+            transform: translateX(5px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .file-name {
+            font-weight: 500;
+            color: #333;
+        }
+
+        .remove-btn {
+            background: #ff6b6b;
+            color: white;
+            border: none;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .remove-btn:hover {
+            background: #ff5252;
+            transform: scale(1.1);
+        }
+
+        .actions {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin: 30px 0;
+        }
+
+        .btn {
+            padding: 15px 30px;
+            border: none;
+            border-radius: 50px;
+            font-size: 1.1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn-primary {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+        }
+
+        .btn-secondary {
+            background: #f1f3f4;
+            color: #333;
+            border: 2px solid #e1e3e4;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .progress-container {
+            margin: 20px 0;
+            display: none;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e1e3e4;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            border-radius: 10px;
+            width: 0%;
+            transition: width 0.3s ease;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+
+        .status {
+            text-align: center;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 10px;
+            font-weight: 500;
+        }
+
+        .status.info { background: #e3f2fd; color: #1976d2; }
+        .status.success { background: #e8f5e8; color: #2e7d32; }
+        .status.error { background: #ffebee; color: #c62828; }
+        .status.warning { background: #fff3e0; color: #f57c00; }
+
+        .count {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            margin-left: 10px;
+        }
+
+        .empty-state {
+            text-align: center;
+            color: #666;
+            font-style: italic;
+            padding: 40px 20px;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                margin: 10px;
+                border-radius: 15px;
+            }
+            
+            .header {
+                padding: 30px 20px;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .main-content {
+                padding: 30px 20px;
+            }
+            
+            .actions {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .btn {
+                width: 100%;
+                max-width: 300px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📄 Unificador de PDFs</h1>
+            <p>Combine múltiplos arquivos PDF em um só, de forma simples e rápida</p>
+        </div>
+        
+        <div class="main-content">
+            <div class="upload-section" id="uploadArea">
+                <div class="upload-icon">📂</div>
+                <h3>Adicione seus arquivos PDF</h3>
+                <p>Clique no botão abaixo ou arraste e solte os arquivos aqui</p>
+                <input type="file" id="fileInput" class="file-input" multiple accept=".pdf">
+                <button class="upload-btn" onclick="document.getElementById('fileInput').click()">
+                    Selecionar PDFs
+                </button>
+            </div>
+
+            <div class="file-list" id="fileList">
+                <div class="empty-state">
+                    <p>Nenhum arquivo selecionado</p>
+                    <span class="count" id="fileCount">0 PDFs</span>
+                </div>
+            </div>
+
+            <div class="progress-container" id="progressContainer">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+                <div class="status info" id="progressStatus">Preparando unificação...</div>
+            </div>
+
+            <div class="actions">
+                <button class="btn btn-primary" id="mergeBtn" disabled onclick="mergePDFs()">
+                    Unificar PDFs
+                </button>
+                <button class="btn btn-secondary" id="clearBtn" disabled onclick="clearFiles()">
+                    Limpar Lista
+                </button>
+            </div>
+
+            <div class="status info" id="statusMessage">
+                Selecione pelo menos 2 arquivos PDF para começar a unificação.
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+    <script>
+        let selectedFiles = [];
+        
+        // Elementos DOM
+        const fileInput = document.getElementById('fileInput');
+        const fileList = document.getElementById('fileList');
+        const fileCount = document.getElementById('fileCount');
+        const mergeBtn = document.getElementById('mergeBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const statusMessage = document.getElementById('statusMessage');
+        const uploadArea = document.getElementById('uploadArea');
+        const progressContainer = document.getElementById('progressContainer');
+        const progressFill = document.getElementById('progressFill');
+        const progressStatus = document.getElementById('progressStatus');
+
+        // Event listeners
+        fileInput.addEventListener('change', handleFiles);
+        
+        // Drag and drop
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+        
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const files = Array.from(e.dataTransfer.files).filter(file => file.type === 'application/pdf');
+            addFiles(files);
+        });
+
+        function handleFiles(event) {
+            const files = Array.from(event.target.files);
+            addFiles(files);
+        }
+
+        function addFiles(files) {
+            let addedCount = 0;
+            
+            files.forEach(file => {
+                if (!selectedFiles.some(f => f.name === file.name)) {
+                    selectedFiles.push(file);
+                    addedCount++;
+                }
+            });
+
+            if (addedCount > 0) {
+                updateFileList();
+                updateButtons();
+                updateStatus(`${addedCount} arquivo(s) adicionado(s). Total: ${selectedFiles.length}`, 'info');
+            } else {
+                updateStatus('Nenhum arquivo novo adicionado (já estavam na lista).', 'warning');
+            }
+        }
+
+        function updateFileList() {
+            if (selectedFiles.length === 0) {
+                fileList.innerHTML = `
+                    <div class="empty-state">
+                        <p>Nenhum arquivo selecionado</p>
+                        <span class="count" id="fileCount">0 PDFs</span>
+                    </div>
+                `;
+                return;
+            }
+
+            const filesHTML = selectedFiles.map((file, index) => `
+                <div class="file-item">
+                    <span class="file-name">📄 ${file.name}</span>
+                    <button class="remove-btn" onclick="removeFile(${index})">×</button>
+                </div>
+            `).join('');
+
+            fileList.innerHTML = filesHTML;
+            fileCount.textContent = `${selectedFiles.length} PDFs`;
+        }
+
+        function removeFile(index) {
+            selectedFiles.splice(index, 1);
+            updateFileList();
+            updateButtons();
+            updateStatus(`Arquivo removido. Total: ${selectedFiles.length}`, 'info');
+        }
+
+        function clearFiles() {
+            selectedFiles = [];
+            updateFileList();
+            updateButtons();
+            updateStatus('Lista de arquivos limpa.', 'info');
+        }
+
+        function updateButtons() {
+            const hasFiles = selectedFiles.length > 0;
+            const canMerge = selectedFiles.length >= 2;
+            
+            mergeBtn.disabled = !canMerge;
+            clearBtn.disabled = !hasFiles;
+        }
+
+        function updateStatus(message, type = 'info') {
+            statusMessage.textContent = message;
+            statusMessage.className = `status ${type}`;
+        }
+
+        async function mergePDFs() {
+            if (selectedFiles.length < 2) {
+                updateStatus('Selecione pelo menos 2 arquivos PDF para unificar.', 'warning');
+                return;
+            }
+
+            // Mostrar progresso
+            progressContainer.style.display = 'block';
+            mergeBtn.disabled = true;
+            clearBtn.disabled = true;
+            
+            try {
+                updateStatus('Iniciando unificação...', 'info');
+                progressFill.style.width = '20%';
+                progressStatus.textContent = 'Carregando arquivos...';
+
+                const mergedPdf = await PDFLib.PDFDocument.create();
+                
+                for (let i = 0; i < selectedFiles.length; i++) {
+                    const file = selectedFiles[i];
+                    progressStatus.textContent = `Processando: ${file.name}`;
+                    progressFill.style.width = `${20 + (i / selectedFiles.length) * 60}%`;
+                    
+                    const arrayBuffer = await file.arrayBuffer();
+                    const pdf = await PDFLib.PDFDocument.load(arrayBuffer);
+                    const copiedPages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
+                    copiedPages.forEach((page) => mergedPdf.addPage(page));
+                    
+                    // Pequeno delay para mostrar o progresso
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                }
+
+                progressFill.style.width = '90%';
+                progressStatus.textContent = 'Finalizando documento...';
+
+                const pdfBytes = await mergedPdf.save();
+                
+                // Download do arquivo
+                const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'pdfs_unificados.pdf';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+                progressFill.style.width = '100%';
+                progressStatus.textContent = 'Download iniciado!';
+                
+                setTimeout(() => {
+                    progressContainer.style.display = 'none';
+                    progressFill.style.width = '0%';
+                    updateStatus('PDFs unificados com sucesso! O download foi iniciado.', 'success');
+                    mergeBtn.disabled = false;
+                    clearBtn.disabled = false;
+                }, 1500);
+
+            } catch (error) {
+                console.error('Erro ao unificar PDFs:', error);
+                progressContainer.style.display = 'none';
+                progressFill.style.width = '0%';
+                updateStatus('Erro ao unificar PDFs. Verifique se todos os arquivos são PDFs válidos.', 'error');
+                mergeBtn.disabled = false;
+                clearBtn.disabled = false;
+            }
+        }
+
+        // Inicialização
+        updateButtons();
+    </script>
+</body>
+</html>
