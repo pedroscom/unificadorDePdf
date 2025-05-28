@@ -110,12 +110,29 @@
             font-size: 0.95rem;
         }
 
+        /* Novo cabeçalho para a lista de arquivos */
+        .file-list-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            background: #f8f9ff;
+            border-radius: 15px 15px 0 0;
+            border-bottom: 1px solid #e1e3e4;
+        }
+        
+        .file-list-header h3 {
+            font-size: 1.2rem;
+            color: #333;
+        }
+
         .file-list {
             background: #f8f9ff;
-            border-radius: 15px;
+            border-radius: 0 0 15px 15px;
             padding: 20px;
-            margin: 20px 0;
             min-height: 100px;
+            max-height: 400px;
+            overflow-y: auto;
         }
 
         .file-item {
@@ -164,6 +181,7 @@
             display: flex;
             align-items: center;
             flex: 1;
+            min-width: 0; /* Permite truncamento do texto */
         }
 
         .file-number {
@@ -181,16 +199,22 @@
             flex-shrink: 0;
         }
 
+        /* Truncar nomes longos */
         .file-name {
             font-weight: 500;
             color: #333;
             flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            max-width: 300px; /* Limite máximo para nomes longos */
         }
 
         .move-buttons {
             display: flex;
             gap: 5px;
             margin-right: 10px;
+            flex-shrink: 0; /* Impede que encolham */
         }
 
         .move-btn {
@@ -229,6 +253,7 @@
             font-size: 0.9rem;
             cursor: pointer;
             transition: all 0.2s ease;
+            flex-shrink: 0; /* Impede que encolha */
         }
 
         .remove-btn:hover {
@@ -236,6 +261,7 @@
             transform: scale(1.1);
         }
 
+        /* Botões movidos para cima */
         .actions {
             display: flex;
             gap: 15px;
@@ -381,6 +407,10 @@
             .move-buttons {
                 display: none;
             }
+            
+            .file-name {
+                max-width: 150px; /* Menor limite em dispositivos móveis */
+            }
         }
     </style>
 </head>
@@ -406,20 +436,7 @@
                 💡 <strong>Dica:</strong> Arraste e solte os arquivos para reordená-los, ou use os botões ↑/↓. A ordem aqui será a ordem final no PDF unificado.
             </div>
 
-            <div class="file-list" id="fileList">
-                <div class="empty-state">
-                    <p>Nenhum arquivo selecionado</p>
-                    <span class="count" id="fileCount">0 PDFs</span>
-                </div>
-            </div>
-
-            <div class="progress-container" id="progressContainer">
-                <div class="progress-bar">
-                    <div class="progress-fill" id="progressFill"></div>
-                </div>
-                <div class="status info" id="progressStatus">Preparando unificação...</div>
-            </div>
-
+            <!-- Botões movidos para cima -->
             <div class="actions">
                 <button class="btn btn-primary" id="mergeBtn" disabled onclick="mergePDFs()">
                     Unificar PDFs
@@ -429,8 +446,28 @@
                 </button>
             </div>
 
+            <!-- Barra de progresso e status agora acima da lista -->
+            <div class="progress-container" id="progressContainer">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+                <div class="status info" id="progressStatus">Preparando unificação...</div>
+            </div>
+
             <div class="status info" id="statusMessage">
                 Selecione pelo menos 2 arquivos PDF para começar a unificação.
+            </div>
+
+            <!-- Cabeçalho com contagem sempre visível -->
+            <div class="file-list-header">
+                <h3>Arquivos Selecionados</h3>
+                <span class="count" id="fileCount">0 PDFs</span>
+            </div>
+
+            <div class="file-list" id="fileList">
+                <div class="empty-state">
+                    <p>Nenhum arquivo selecionado</p>
+                </div>
             </div>
         </div>
     </div>
@@ -499,11 +536,13 @@
         }
 
         function updateFileList() {
+            // Atualiza o contador sempre
+            fileCount.textContent = `${selectedFiles.length} PDFs`;
+            
             if (selectedFiles.length === 0) {
                 fileList.innerHTML = `
                     <div class="empty-state">
                         <p>Nenhum arquivo selecionado</p>
-                        <span class="count" id="fileCount">0 PDFs</span>
                     </div>
                 `;
                 reorderInfo.style.display = 'none';
@@ -524,7 +563,7 @@
                      ondragend="handleDragEnd(event)">
                     <div class="file-info">
                         <div class="file-number">${index + 1}</div>
-                        <span class="file-name">📄 ${file.name}</span>
+                        <span class="file-name" title="${file.name}">📄 ${file.name}</span>
                     </div>
                     <div class="move-buttons">
                         <button class="move-btn" onclick="moveFile(${index}, 'up')" 
@@ -537,7 +576,6 @@
             `).join('');
 
             fileList.innerHTML = filesHTML;
-            fileCount.textContent = `${selectedFiles.length} PDFs`;
         }
 
         // Funções de drag and drop para reordenação
