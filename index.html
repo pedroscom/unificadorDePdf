@@ -131,8 +131,7 @@
             border-radius: 0 0 15px 15px;
             padding: 20px;
             min-height: 100px;
-            max-height: 400px;
-            overflow-y: auto;
+            /* Removido max-height e overflow-y */
         }
 
         .file-item {
@@ -375,6 +374,12 @@
         .drag-placeholder.active {
             opacity: 1;
         }
+        
+        /* Classe para bloquear a lista durante a unificação */
+        .file-list.locked {
+            opacity: 0.7;
+            pointer-events: none;
+        }
 
         @media (max-width: 768px) {
             .container {
@@ -477,6 +482,7 @@
         let selectedFiles = [];
         let draggedIndex = null;
         let dragOverIndex = null;
+        let isMerging = false; // Flag para controlar o estado de unificação
         
         // Elementos DOM
         const fileInput = document.getElementById('fileInput');
@@ -496,15 +502,18 @@
         
         // Drag and drop para upload
         uploadArea.addEventListener('dragover', (e) => {
+            if (isMerging) return;
             e.preventDefault();
             uploadArea.classList.add('dragover');
         });
         
         uploadArea.addEventListener('dragleave', () => {
+            if (isMerging) return;
             uploadArea.classList.remove('dragover');
         });
         
         uploadArea.addEventListener('drop', (e) => {
+            if (isMerging) return;
             e.preventDefault();
             uploadArea.classList.remove('dragover');
             const files = Array.from(e.dataTransfer.files).filter(file => file.type === 'application/pdf');
@@ -512,11 +521,14 @@
         });
 
         function handleFiles(event) {
+            if (isMerging) return;
             const files = Array.from(event.target.files);
             addFiles(files);
         }
 
         function addFiles(files) {
+            if (isMerging) return;
+            
             let addedCount = 0;
             
             files.forEach(file => {
@@ -553,44 +565,56 @@
 
             const filesHTML = selectedFiles.map((file, index) => `
                 <div class="file-item" 
-                     draggable="true" 
+                     draggable="${!isMerging}" 
                      data-index="${index}"
-                     ondragstart="handleDragStart(event)"
-                     ondragover="handleDragOver(event)"
-                     ondragenter="handleDragEnter(event)"
-                     ondragleave="handleDragLeave(event)"
-                     ondrop="handleDrop(event)"
-                     ondragend="handleDragEnd(event)">
+                     ondragstart="${!isMerging ? 'handleDragStart(event)' : ''}"
+                     ondragover="${!isMerging ? 'handleDragOver(event)' : ''}"
+                     ondragenter="${!isMerging ? 'handleDragEnter(event)' : ''}"
+                     ondragleave="${!isMerging ? 'handleDragLeave(event)' : ''}"
+                     ondrop="${!isMerging ? 'handleDrop(event)' : ''}"
+                     ondragend="${!isMerging ? 'handleDragEnd(event)' : ''}">
                     <div class="file-info">
                         <div class="file-number">${index + 1}</div>
                         <span class="file-name" title="${file.name}">📄 ${file.name}</span>
                     </div>
                     <div class="move-buttons">
-                        <button class="move-btn" onclick="moveFile(${index}, 'up')" 
-                                ${index === 0 ? 'disabled' : ''} title="Mover para cima">↑</button>
-                        <button class="move-btn" onclick="moveFile(${index}, 'down')" 
-                                ${index === selectedFiles.length - 1 ? 'disabled' : ''} title="Mover para baixo">↓</button>
+                        <button class="move-btn" onclick="${!isMerging ? `moveFile(${index}, 'up')` : ''}" 
+                                ${index === 0 || isMerging ? 'disabled' : ''} title="Mover para cima">↑</button>
+                        <button class="move-btn" onclick="${!isMerging ? `moveFile(${index}, 'down')` : ''}" 
+                                ${index === selectedFiles.length - 1 || isMerging ? 'disabled' : ''} title="Mover para baixo">↓</button>
                     </div>
-                    <button class="remove-btn" onclick="removeFile(${index})">×</button>
+                    <button class="remove-btn" onclick="${!isMerging ? `removeFile(${index})` : ''}" ${isMerging ? 'disabled' : ''}>
+                        ×
+                    </button>
                 </div>
             `).join('');
 
             fileList.innerHTML = filesHTML;
+            
+            // Aplica classe de bloqueio durante a unificação
+            if (isMerging) {
+                fileList.classList.add('locked');
+            } else {
+                fileList.classList.remove('locked');
+            }
         }
 
         // Funções de drag and drop para reordenação
         function handleDragStart(e) {
+            if (isMerging) return;
             draggedIndex = parseInt(e.target.getAttribute('data-index'));
             e.target.classList.add('dragging');
             e.dataTransfer.effectAllowed = 'move';
         }
 
         function handleDragOver(e) {
+            if (isMerging) return;
             e.preventDefault();
             e.dataTransfer.dropEffect = 'move';
         }
 
         function handleDragEnter(e) {
+            if (isMerging) return;
             e.preventDefault();
             const target = e.target.closest('.file-item');
             if (target && draggedIndex !== null) {
@@ -603,6 +627,7 @@
         }
 
         function handleDragLeave(e) {
+            if (isMerging) return;
             const target = e.target.closest('.file-item');
             if (target) {
                 target.classList.remove('drag-over');
@@ -610,6 +635,7 @@
         }
 
         function handleDrop(e) {
+            if (isMerging) return;
             e.preventDefault();
             const target = e.target.closest('.file-item');
             if (target && draggedIndex !== null) {
@@ -633,6 +659,7 @@
         }
 
         function handleDragEnd(e) {
+            if (isMerging) return;
             e.target.classList.remove('dragging');
             document.querySelectorAll('.file-item').forEach(item => {
                 item.classList.remove('drag-over');
@@ -642,6 +669,8 @@
         }
 
         function moveFile(index, direction) {
+            if (isMerging) return;
+            
             let newIndex;
             if (direction === 'up' && index > 0) {
                 newIndex = index - 1;
@@ -661,6 +690,8 @@
         }
 
         function removeFile(index) {
+            if (isMerging) return;
+            
             selectedFiles.splice(index, 1);
             updateFileList();
             updateButtons();
@@ -668,6 +699,8 @@
         }
 
         function clearFiles() {
+            if (isMerging) return;
+            
             selectedFiles = [];
             updateFileList();
             updateButtons();
@@ -678,8 +711,8 @@
             const hasFiles = selectedFiles.length > 0;
             const canMerge = selectedFiles.length >= 2;
             
-            mergeBtn.disabled = !canMerge;
-            clearBtn.disabled = !hasFiles;
+            mergeBtn.disabled = !canMerge || isMerging;
+            clearBtn.disabled = !hasFiles || isMerging;
         }
 
         function updateStatus(message, type = 'info') {
@@ -688,11 +721,17 @@
         }
 
         async function mergePDFs() {
+            if (isMerging) return;
             if (selectedFiles.length < 2) {
                 updateStatus('Selecione pelo menos 2 arquivos PDF para unificar.', 'warning');
                 return;
             }
 
+            // Inicia o processo de unificação
+            isMerging = true;
+            updateFileList(); // Atualiza para mostrar estado bloqueado
+            updateButtons();
+            
             // Mostrar progresso
             progressContainer.style.display = 'block';
             mergeBtn.disabled = true;
@@ -741,18 +780,24 @@
                 setTimeout(() => {
                     progressContainer.style.display = 'none';
                     progressFill.style.width = '0%';
+                    
+                    // Limpa a lista após unificação bem-sucedida
+                    selectedFiles = [];
+                    isMerging = false;
+                    updateFileList();
+                    updateButtons();
+                    
                     updateStatus('PDFs unificados com sucesso na ordem especificada! O download foi iniciado.', 'success');
-                    mergeBtn.disabled = false;
-                    clearBtn.disabled = false;
                 }, 1500);
 
             } catch (error) {
                 console.error('Erro ao unificar PDFs:', error);
                 progressContainer.style.display = 'none';
                 progressFill.style.width = '0%';
+                isMerging = false;
+                updateFileList(); // Remove o estado bloqueado
+                updateButtons();
                 updateStatus('Erro ao unificar PDFs. Verifique se todos os arquivos são PDFs válidos.', 'error');
-                mergeBtn.disabled = false;
-                clearBtn.disabled = false;
             }
         }
 
