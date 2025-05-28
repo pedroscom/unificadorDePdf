@@ -10,8 +10,8 @@ from queue import Queue, Empty
 class PDFMergerApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Unificador de PDFs Avançado V4")
-        self.root.geometry("800x650")
+        self.root.title("Unificador de PDFs Avançado V5 - Com Drag & Drop")
+        self.root.geometry("800x700")
         self.root.resizable(False, False)
         
         self.selected_files = []
@@ -19,7 +19,12 @@ class PDFMergerApp:
         self.queue = Queue()  # Queue for thread communication
         self.is_merging = False  # Flag to track merging state
         
+        # Variáveis para drag & drop
+        self.drag_start_index = None
+        self.drag_highlight_index = None
+        
         self.create_widgets()
+        self.setup_drag_drop()
         self.update_file_list()
         self.update_buttons_state()
     
@@ -45,16 +50,56 @@ class PDFMergerApp:
         )
         self.btn_reset.pack(side=tk.LEFT, padx=10)
 
+        # Botões para mover itens manualmente
+        move_frame = ttk.Frame(select_frame)
+        move_frame.pack(side=tk.LEFT, padx=20)
+        
+        self.btn_move_up = ttk.Button(
+            move_frame,
+            text="↑ Subir",
+            state=tk.DISABLED,
+            command=self.move_up,
+            width=8
+        )
+        self.btn_move_up.pack(side=tk.LEFT, padx=2)
+        
+        self.btn_move_down = ttk.Button(
+            move_frame,
+            text="↓ Descer",
+            state=tk.DISABLED,
+            command=self.move_down,
+            width=8
+        )
+        self.btn_move_down.pack(side=tk.LEFT, padx=2)
+
         self.count_label = ttk.Label(main_frame, text="PDFs selecionados: 0")
         self.count_label.pack(pady=5)
         
+        # Instrução sobre drag & drop
+        instruction_label = ttk.Label(
+            main_frame, 
+            text="💡 Dica: Arraste e solte os itens na lista para reordená-los, ou use os botões ↑/↓",
+            foreground="blue"
+        )
+        instruction_label.pack(pady=5)
+        
+        # Frame para a listbox com scrollbar
+        listbox_frame = ttk.Frame(main_frame)
+        listbox_frame.pack(pady=10, fill=tk.BOTH, expand=True)
+        
         self.listbox = tk.Listbox(
-            main_frame,
+            listbox_frame,
             width=100,
             height=15,
-            selectmode=tk.SINGLE
+            selectmode=tk.SINGLE,
+            font=("Arial", 10)
         )
-        self.listbox.pack(pady=10)
+        
+        scrollbar = ttk.Scrollbar(listbox_frame, orient="vertical", command=self.listbox.yview)
+        self.listbox.configure(yscrollcommand=scrollbar.set)
+        
+        self.listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         
         action_btn_frame = ttk.Frame(main_frame)
         action_btn_frame.pack(pady=10)
@@ -84,6 +129,154 @@ class PDFMergerApp:
         
         self.status_label = ttk.Label(main_frame, text="Selecione pelo menos 2 arquivos PDF para unificar.")
         self.status_label.pack(pady=10)
+    
+    def setup_drag_drop(self):
+        """Configura os eventos de drag & drop na listbox."""
+        self.listbox.bind("<Button-1>", self.on_drag_start)
+        self.listbox.bind("<B1-Motion>", self.on_drag_motion)
+        self.listbox.bind("<ButtonRelease-1>", self.on_drag_release)
+        self.listbox.bind("<<ListboxSelect>>", self.on_selection_change)
+    
+    def on_drag_start(self, event):
+        """Inicia o processo de drag."""
+        if self.is_merging:
+            return
+            
+        index = self.listbox.nearest(event.y)
+        if 0 <= index < len(self.selected_files):
+            self.drag_start_index = index
+            self.listbox.selection_clear(0, tk.END)
+            self.listbox.selection_set(index)
+    
+    def on_drag_motion(self, event):
+        """Processa o movimento durante o drag."""
+        if self.drag_start_index is None or self.is_merging:
+            return
+        
+        current_index = self.listbox.nearest(event.y)
+        if 0 <= current_index < len(self.selected_files):
+            # Remove highlight anterior
+            if self.drag_highlight_index is not None:
+                self.listbox.itemconfig(self.drag_highlight_index, {'bg': 'white'})
+            
+            # Adiciona highlight atual
+            if current_index != self.drag_start_index:
+                self.listbox.itemconfig(current_index, {'bg': 'lightblue'})
+                self.drag_highlight_index = current_index
+            else:
+                self.drag_highlight_index = None
+    
+    def on_drag_release(self, event):
+        """Finaliza o processo de drag e reordena os itens."""
+        if self.drag_start_index is None or self.is_merging:
+            self.drag_start_index = None
+            self.drag_highlight_index = None
+            return
+        
+        drop_index = self.listbox.nearest(event.y)
+        
+        # Remove qualquer highlight
+        if self.drag_highlight_index is not None:
+            self.listbox.itemconfig(self.drag_highlight_index, {'bg': 'white'})
+        
+        # Reordena apenas se necessário e válido
+        if (0 <= drop_index < len(self.selected_files) and 
+            drop_index != self.drag_start_index):
+            
+            # Move o item na lista
+            moved_file = self.selected_files.pop(self.drag_start_index)
+            self.selected_files.insert(drop_index, moved_file)
+            
+            # Atualiza a interface
+            self.update_file_list()
+            self.listbox.selection_clear(0, tk.END)
+            self.listbox.selection_set(drop_index)
+            
+            self.status_label.config(
+                text=f"Item movido da posição {self.drag_start_index + 1} para {drop_index + 1}.",
+                foreground="green"
+            )
+            
+            # Limpa o arquivo de saída quando a ordem muda
+            self.output_file = ""
+            self.update_buttons_state()
+        
+        # Reset das variáveis de drag
+        self.drag_start_index = None
+        self.drag_highlight_index = None
+    
+    def on_selection_change(self, event):
+        """Atualiza os botões de movimento quando a seleção muda."""
+        self.update_move_buttons()
+    
+    def move_up(self):
+        """Move o item selecionado para cima."""
+        selection = self.listbox.curselection()
+        if not selection or self.is_merging:
+            return
+        
+        index = selection[0]
+        if index > 0:
+            # Troca os itens
+            self.selected_files[index], self.selected_files[index - 1] = \
+                self.selected_files[index - 1], self.selected_files[index]
+            
+            # Atualiza a interface
+            self.update_file_list()
+            self.listbox.selection_clear(0, tk.END)
+            self.listbox.selection_set(index - 1)
+            
+            self.status_label.config(
+                text=f"Item movido para cima (posição {index} → {index}).",
+                foreground="green"
+            )
+            
+            # Limpa o arquivo de saída quando a ordem muda
+            self.output_file = ""
+            self.update_buttons_state()
+    
+    def move_down(self):
+        """Move o item selecionado para baixo."""
+        selection = self.listbox.curselection()
+        if not selection or self.is_merging:
+            return
+        
+        index = selection[0]
+        if index < len(self.selected_files) - 1:
+            # Troca os itens
+            self.selected_files[index], self.selected_files[index + 1] = \
+                self.selected_files[index + 1], self.selected_files[index]
+            
+            # Atualiza a interface
+            self.update_file_list()
+            self.listbox.selection_clear(0, tk.END)
+            self.listbox.selection_set(index + 1)
+            
+            self.status_label.config(
+                text=f"Item movido para baixo (posição {index + 1} → {index + 2}).",
+                foreground="green"
+            )
+            
+            # Limpa o arquivo de saída quando a ordem muda
+            self.output_file = ""
+            self.update_buttons_state()
+    
+    def update_move_buttons(self):
+        """Atualiza o estado dos botões de movimento."""
+        if self.is_merging or len(self.selected_files) <= 1:
+            self.btn_move_up["state"] = tk.DISABLED
+            self.btn_move_down["state"] = tk.DISABLED
+            return
+        
+        selection = self.listbox.curselection()
+        if not selection:
+            self.btn_move_up["state"] = tk.DISABLED
+            self.btn_move_down["state"] = tk.DISABLED
+            return
+        
+        index = selection[0]
+        self.btn_move_up["state"] = tk.NORMAL if index > 0 else tk.DISABLED
+        self.btn_move_down["state"] = tk.NORMAL if index < len(self.selected_files) - 1 else tk.DISABLED
     
     def select_files(self):
         files = filedialog.askopenfilenames(
@@ -122,9 +315,11 @@ class PDFMergerApp:
 
     def update_file_list(self):
         self.listbox.delete(0, tk.END)
-        for f in self.selected_files:
-            self.listbox.insert(tk.END, os.path.basename(f))
+        for i, f in enumerate(self.selected_files, 1):
+            filename = os.path.basename(f)
+            self.listbox.insert(tk.END, f"{i:2d}. {filename}")
         self.count_label.config(text=f"PDFs selecionados: {len(self.selected_files)}")
+        self.update_move_buttons()
     
     def update_buttons_state(self):
         num_files = len(self.selected_files)
@@ -134,6 +329,8 @@ class PDFMergerApp:
             self.btn_reset["state"] = tk.DISABLED
             self.btn_merge["state"] = tk.DISABLED
             self.btn_open_folder["state"] = tk.DISABLED
+            self.btn_move_up["state"] = tk.DISABLED
+            self.btn_move_down["state"] = tk.DISABLED
         else:
             self.btn_select["state"] = tk.NORMAL
             self.btn_reset["state"] = tk.NORMAL if num_files > 0 else tk.DISABLED
@@ -141,6 +338,9 @@ class PDFMergerApp:
             # Habilita abrir pasta apenas se o arquivo foi criado com sucesso
             can_open_folder = bool(self.output_file and os.path.exists(self.output_file))
             self.btn_open_folder["state"] = tk.NORMAL if can_open_folder else tk.DISABLED
+            
+            # Atualiza botões de movimento
+            self.update_move_buttons()
 
     def merge_files_threaded(self):
         if len(self.selected_files) < 2:
@@ -164,7 +364,7 @@ class PDFMergerApp:
 
         # Atualiza interface para estado de processamento
         self.is_merging = True
-        self.status_label.config(text="Unificando PDFs, aguarde...", foreground="blue")
+        self.status_label.config(text="Unificando PDFs na ordem especificada, aguarde...", foreground="blue")
         self.progress.pack(pady=10)
         self.progress.start(10)  # Velocidade da animação
         self.update_buttons_state()
@@ -199,7 +399,7 @@ class PDFMergerApp:
             merger.close()
             
             # Sucesso
-            success_msg = f"PDFs unificados com sucesso!\n\nArquivo salvo em:\n{output_path}"
+            success_msg = f"PDFs unificados com sucesso na ordem especificada!\n\nArquivo salvo em:\n{output_path}"
             self.queue.put(("success", success_msg, "Unificação concluída com sucesso!"))
             
         except Exception as e:
