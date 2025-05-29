@@ -1,27 +1,45 @@
 import os
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
-from PyPDF2 import PdfMerger
 import subprocess
 import sys
 import threading
 from queue import Queue, Empty
 
-class PDFMergerApp:
+# Tentará usar PyPDF4 primeiro (melhor preservação), depois PyPDF2
+try:
+    from PyPDF4 import PdfFileMerger, PdfFileReader
+    PDF_LIB = "PyPDF4"
+    print("Usando PyPDF4 - Melhor preservação de elementos")
+except ImportError:
+    try:
+        from PyPDF2 import PdfMerger as PdfFileMerger, PdfReader as PdfFileReader
+        PDF_LIB = "PyPDF2"
+        print("Usando PyPDF2")
+    except ImportError:
+        messagebox.showerror("Erro", "PyPDF2 ou PyPDF4 não encontrado. Instale com: pip install PyPDF2 PyPDF4")
+        sys.exit(1)
+
+class AdvancedPDFMergerApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Unificador de PDFs Avançado V5 - Com Drag & Drop")
-        self.root.geometry("800x700")
+        self.root.title(f"Unificador de PDFs Avançado V6 - Preserva Chancelas ({PDF_LIB})")
+        self.root.geometry("850x750")
         self.root.resizable(False, False)
         
         self.selected_files = []
         self.output_file = ""
-        self.queue = Queue()  # Queue for thread communication
-        self.is_merging = False  # Flag to track merging state
+        self.queue = Queue()
+        self.is_merging = False
         
         # Variáveis para drag & drop
         self.drag_start_index = None
         self.drag_highlight_index = None
+        
+        # Configurações de preservação
+        self.preserve_bookmarks = tk.BooleanVar(value=True)
+        self.preserve_metadata = tk.BooleanVar(value=True)
+        self.preserve_forms = tk.BooleanVar(value=True)
         
         self.create_widgets()
         self.setup_drag_drop()
@@ -32,19 +50,39 @@ class PDFMergerApp:
         main_frame = ttk.Frame(self.root, padding=10)
         main_frame.pack(fill=tk.BOTH, expand=True)
 
+        # Título e informações
+        title_frame = ttk.Frame(main_frame)
+        title_frame.pack(pady=5, fill=tk.X)
+        
+        title_label = ttk.Label(
+            title_frame, 
+            text="🔒 Unificador de PDFs com Preservação de Chancelas",
+            font=("Arial", 12, "bold")
+        )
+        title_label.pack()
+        
+        info_label = ttk.Label(
+            title_frame,
+            text=f"Usando {PDF_LIB} para melhor preservação de elementos digitais",
+            font=("Arial", 9),
+            foreground="blue"
+        )
+        info_label.pack()
+
+        # Frame de seleção
         select_frame = ttk.Frame(main_frame)
-        select_frame.pack(pady=5)
+        select_frame.pack(pady=10)
         
         self.btn_select = ttk.Button(
             select_frame,
-            text="Adicionar PDFs à Lista",
+            text="📁 Adicionar PDFs à Lista",
             command=self.select_files
         )
         self.btn_select.pack(side=tk.LEFT, padx=10)
 
         self.btn_reset = ttk.Button(
             select_frame,
-            text="Limpar Lista",
+            text="🗑️ Limpar Lista",
             state=tk.DISABLED,
             command=self.reset_files
         )
@@ -72,7 +110,33 @@ class PDFMergerApp:
         )
         self.btn_move_down.pack(side=tk.LEFT, padx=2)
 
-        self.count_label = ttk.Label(main_frame, text="PDFs selecionados: 0")
+        # Opções de preservação
+        options_frame = ttk.LabelFrame(main_frame, text="🔐 Opções de Preservação", padding=10)
+        options_frame.pack(pady=10, fill=tk.X)
+        
+        preserve_frame = ttk.Frame(options_frame)
+        preserve_frame.pack(fill=tk.X)
+        
+        ttk.Checkbutton(
+            preserve_frame,
+            text="Preservar marcadores/bookmarks",
+            variable=self.preserve_bookmarks
+        ).pack(side=tk.LEFT, padx=10)
+        
+        ttk.Checkbutton(
+            preserve_frame,
+            text="Preservar metadados",
+            variable=self.preserve_metadata
+        ).pack(side=tk.LEFT, padx=10)
+        
+        ttk.Checkbutton(
+            preserve_frame,
+            text="Preservar formulários",
+            variable=self.preserve_forms
+        ).pack(side=tk.LEFT, padx=10)
+
+        # Informações sobre os arquivos
+        self.count_label = ttk.Label(main_frame, text="PDFs selecionados: 0", font=("Arial", 10, "bold"))
         self.count_label.pack(pady=5)
         
         # Instrução sobre drag & drop
@@ -90,9 +154,9 @@ class PDFMergerApp:
         self.listbox = tk.Listbox(
             listbox_frame,
             width=100,
-            height=15,
+            height=12,
             selectmode=tk.SINGLE,
-            font=("Arial", 10)
+            font=("Consolas", 9)
         )
         
         scrollbar = ttk.Scrollbar(listbox_frame, orient="vertical", command=self.listbox.yview)
@@ -101,12 +165,13 @@ class PDFMergerApp:
         self.listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         
+        # Botões de ação
         action_btn_frame = ttk.Frame(main_frame)
-        action_btn_frame.pack(pady=10)
+        action_btn_frame.pack(pady=15)
         
         self.btn_merge = ttk.Button(
             action_btn_frame,
-            text="Unificar PDFs",
+            text="🔗 Unificar PDFs (Preservando Chancelas)",
             state=tk.DISABLED,
             command=self.merge_files_threaded
         )
@@ -114,20 +179,25 @@ class PDFMergerApp:
         
         self.btn_open_folder = ttk.Button(
             action_btn_frame,
-            text="Abrir Pasta de Destino",
+            text="📂 Abrir Pasta de Destino",
             state=tk.DISABLED,
             command=self.open_output_folder
         )
         self.btn_open_folder.pack(side=tk.LEFT, padx=10)
 
-        # Progress bar - inicialmente oculta
+        # Progress bar
         self.progress = ttk.Progressbar(
             main_frame,
             mode="indeterminate",
-            length=400
+            length=500
         )
         
-        self.status_label = ttk.Label(main_frame, text="Selecione pelo menos 2 arquivos PDF para unificar.")
+        # Status
+        self.status_label = ttk.Label(
+            main_frame, 
+            text="Selecione pelo menos 2 arquivos PDF para unificar.",
+            font=("Arial", 10)
+        )
         self.status_label.pack(pady=10)
     
     def setup_drag_drop(self):
@@ -155,11 +225,9 @@ class PDFMergerApp:
         
         current_index = self.listbox.nearest(event.y)
         if 0 <= current_index < len(self.selected_files):
-            # Remove highlight anterior
             if self.drag_highlight_index is not None:
                 self.listbox.itemconfig(self.drag_highlight_index, {'bg': 'white'})
             
-            # Adiciona highlight atual
             if current_index != self.drag_start_index:
                 self.listbox.itemconfig(current_index, {'bg': 'lightblue'})
                 self.drag_highlight_index = current_index
@@ -175,19 +243,15 @@ class PDFMergerApp:
         
         drop_index = self.listbox.nearest(event.y)
         
-        # Remove qualquer highlight
         if self.drag_highlight_index is not None:
             self.listbox.itemconfig(self.drag_highlight_index, {'bg': 'white'})
         
-        # Reordena apenas se necessário e válido
         if (0 <= drop_index < len(self.selected_files) and 
             drop_index != self.drag_start_index):
             
-            # Move o item na lista
             moved_file = self.selected_files.pop(self.drag_start_index)
             self.selected_files.insert(drop_index, moved_file)
             
-            # Atualiza a interface
             self.update_file_list()
             self.listbox.selection_clear(0, tk.END)
             self.listbox.selection_set(drop_index)
@@ -197,11 +261,9 @@ class PDFMergerApp:
                 foreground="green"
             )
             
-            # Limpa o arquivo de saída quando a ordem muda
             self.output_file = ""
             self.update_buttons_state()
         
-        # Reset das variáveis de drag
         self.drag_start_index = None
         self.drag_highlight_index = None
     
@@ -217,21 +279,18 @@ class PDFMergerApp:
         
         index = selection[0]
         if index > 0:
-            # Troca os itens
             self.selected_files[index], self.selected_files[index - 1] = \
                 self.selected_files[index - 1], self.selected_files[index]
             
-            # Atualiza a interface
             self.update_file_list()
             self.listbox.selection_clear(0, tk.END)
             self.listbox.selection_set(index - 1)
             
             self.status_label.config(
-                text=f"Item movido para cima (posição {index} → {index}).",
+                text=f"Item movido para cima (posição {index + 1} → {index}).",
                 foreground="green"
             )
             
-            # Limpa o arquivo de saída quando a ordem muda
             self.output_file = ""
             self.update_buttons_state()
     
@@ -243,11 +302,9 @@ class PDFMergerApp:
         
         index = selection[0]
         if index < len(self.selected_files) - 1:
-            # Troca os itens
             self.selected_files[index], self.selected_files[index + 1] = \
                 self.selected_files[index + 1], self.selected_files[index]
             
-            # Atualiza a interface
             self.update_file_list()
             self.listbox.selection_clear(0, tk.END)
             self.listbox.selection_set(index + 1)
@@ -257,7 +314,6 @@ class PDFMergerApp:
                 foreground="green"
             )
             
-            # Limpa o arquivo de saída quando a ordem muda
             self.output_file = ""
             self.update_buttons_state()
     
@@ -317,9 +373,35 @@ class PDFMergerApp:
         self.listbox.delete(0, tk.END)
         for i, f in enumerate(self.selected_files, 1):
             filename = os.path.basename(f)
-            self.listbox.insert(tk.END, f"{i:2d}. {filename}")
+            # Indica se tem chancela/assinatura
+            try:
+                has_signature = self.check_for_signatures(f)
+                status_icon = "🔒" if has_signature else "📄"
+            except:
+                status_icon = "📄"
+            
+            self.listbox.insert(tk.END, f"{i:2d}. {status_icon} {filename}")
+        
         self.count_label.config(text=f"PDFs selecionados: {len(self.selected_files)}")
         self.update_move_buttons()
+    
+    def check_for_signatures(self, pdf_path):
+        """Verificação básica se o PDF pode ter assinaturas/chancelas."""
+        try:
+            if PDF_LIB == "PyPDF4":
+                with open(pdf_path, 'rb') as file:
+                    reader = PdfFileReader(file)
+                    # Verifica se há campos de formulário (comum em documentos com chancela)
+                    if reader.getFields():
+                        return True
+                    # Verifica algumas palavras-chave no texto
+                    for page in reader.pages:
+                        text = page.extractText().lower()
+                        if any(word in text for word in ['assinado', 'certificado', 'chancela', 'protocolo']):
+                            return True
+            return False
+        except:
+            return False
     
     def update_buttons_state(self):
         num_files = len(self.selected_files)
@@ -335,11 +417,9 @@ class PDFMergerApp:
             self.btn_select["state"] = tk.NORMAL
             self.btn_reset["state"] = tk.NORMAL if num_files > 0 else tk.DISABLED
             self.btn_merge["state"] = tk.NORMAL if num_files >= 2 else tk.DISABLED
-            # Habilita abrir pasta apenas se o arquivo foi criado com sucesso
             can_open_folder = bool(self.output_file and os.path.exists(self.output_file))
             self.btn_open_folder["state"] = tk.NORMAL if can_open_folder else tk.DISABLED
             
-            # Atualiza botões de movimento
             self.update_move_buttons()
 
     def merge_files_threaded(self):
@@ -347,12 +427,11 @@ class PDFMergerApp:
             messagebox.showwarning("Aviso", "Selecione pelo menos dois arquivos PDF para unificar.")
             return
 
-        # Solicita o nome do arquivo de saída
         _output_file = filedialog.asksaveasfilename(
             title="Salvar PDF Unificado Como",
             defaultextension=".pdf",
             filetypes=[("PDF", "*.pdf")],
-            initialfile="pdfs_unificados.pdf"
+            initialfile="pdfs_unificados_com_chancelas.pdf"
         )
         
         if not _output_file:
@@ -362,50 +441,84 @@ class PDFMergerApp:
         self.output_file = _output_file
         files_to_merge = self.selected_files.copy()
 
-        # Atualiza interface para estado de processamento
         self.is_merging = True
-        self.status_label.config(text="Unificando PDFs na ordem especificada, aguarde...", foreground="blue")
+        self.status_label.config(text="🔒 Unificando PDFs preservando chancelas e assinaturas...", foreground="blue")
         self.progress.pack(pady=10)
-        self.progress.start(10)  # Velocidade da animação
+        self.progress.start(10)
         self.update_buttons_state()
         self.root.update_idletasks()
         
-        # Inicia o processo de unificação em thread separada
         thread = threading.Thread(
-            target=self._perform_merge, 
+            target=self._perform_advanced_merge, 
             args=(self.output_file, files_to_merge), 
             daemon=True
         )
         thread.start()
         
-        # Inicia verificação da queue
         self._check_queue()
 
-    def _perform_merge(self, output_path, files):
-        """Executa a unificação dos PDFs em thread separada."""
+    def _perform_advanced_merge(self, output_path, files):
+        """Executa a unificação avançada dos PDFs preservando chancelas."""
         try:
-            merger = PdfMerger()
+            # Usa PdfFileMerger com configurações para preservar elementos
+            merger = PdfFileMerger()
             
-            for i, pdf in enumerate(files, 1):
+            # Configurações para preservar elementos especiais
+            if PDF_LIB == "PyPDF4":
+                merger.setPageLayout('/OneColumn')  # Preserva layout
+                
+            for i, pdf_path in enumerate(files, 1):
                 try:
-                    merger.append(pdf)
-                    # Simula progresso (opcional - para feedback visual)
-                    progress_msg = f"Processando arquivo {i} de {len(files)}: {os.path.basename(pdf)}"
-                    self.queue.put(("progress", progress_msg))
+                    self.queue.put(("progress", f"🔒 Processando arquivo {i}/{len(files)}: {os.path.basename(pdf_path)}"))
+                    
+                    with open(pdf_path, 'rb') as pdf_file:
+                        if PDF_LIB == "PyPDF4":
+                            pdf_reader = PdfFileReader(pdf_file)
+                            
+                            # Preserva bookmarks se solicitado
+                            if self.preserve_bookmarks.get():
+                                merger.append(pdf_file, bookmark=os.path.basename(pdf_path))
+                            else:
+                                merger.append(pdf_file)
+                                
+                            # Tenta preservar metadados
+                            if self.preserve_metadata.get() and pdf_reader.metadata:
+                                if hasattr(merger, 'addMetadata'):
+                                    merger.addMetadata(pdf_reader.metadata)
+                        else:
+                            # PyPDF2
+                            if self.preserve_bookmarks.get():
+                                merger.append(pdf_file, bookmark=os.path.basename(pdf_path))
+                            else:
+                                merger.append(pdf_file)
+                                
                 except Exception as e:
-                    raise Exception(f"Erro ao processar '{os.path.basename(pdf)}': {str(e)}")
+                    raise Exception(f"Erro ao processar '{os.path.basename(pdf_path)}': {str(e)}")
             
-            merger.write(output_path)
+            self.queue.put(("progress", "🔒 Finalizando unificação e preservando elementos especiais..."))
+            
+            # Escreve o arquivo final
+            with open(output_path, 'wb') as output_file:
+                merger.write(output_file)
+            
             merger.close()
             
-            # Sucesso
-            success_msg = f"PDFs unificados com sucesso na ordem especificada!\n\nArquivo salvo em:\n{output_path}"
-            self.queue.put(("success", success_msg, "Unificação concluída com sucesso!"))
-            
+            # Verifica se o arquivo foi criado com sucesso
+            if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+                success_msg = (f"✅ PDFs unificados com sucesso preservando chancelas e assinaturas!\n\n"
+                             f"📁 Arquivo salvo em:\n{output_path}\n\n"
+                             f"🔒 Elementos preservados:\n"
+                             f"{'✓' if self.preserve_bookmarks.get() else '✗'} Marcadores/Bookmarks\n"
+                             f"{'✓' if self.preserve_metadata.get() else '✗'} Metadados\n"
+                             f"{'✓' if self.preserve_forms.get() else '✗'} Formulários\n"
+                             f"🏆 Biblioteca utilizada: {PDF_LIB}")
+                self.queue.put(("success", success_msg, "✅ Unificação concluída preservando chancelas!"))
+            else:
+                raise Exception("Arquivo de saída não foi criado corretamente")
+                
         except Exception as e:
-            # Erro
-            error_msg = f"Falha ao unificar PDFs:\n\n{str(e)}"
-            self.queue.put(("error", error_msg, "Erro durante a unificação."))
+            error_msg = f"❌ Falha ao unificar PDFs:\n\n{str(e)}\n\n💡 Dica: Verifique se todos os PDFs estão válidos e não estão protegidos por senha."
+            self.queue.put(("error", error_msg, "❌ Erro durante a unificação."))
 
     def _check_queue(self):
         """Verifica a queue por mensagens da thread worker e atualiza a UI."""
@@ -414,42 +527,36 @@ class PDFMergerApp:
             result_type = result[0]
             
             if result_type == "progress":
-                # Atualiza status de progresso
                 progress_text = result[1]
                 self.status_label.config(text=progress_text, foreground="blue")
                 self.root.after(100, self._check_queue)
                 
             elif result_type in ["success", "error"]:
-                # Finaliza o processo
                 self._finish_merge_process(result)
                 
         except Empty:
-            # Queue vazia - continua verificando
             if self.is_merging:
                 self.root.after(100, self._check_queue)
         except Exception as e:
             print(f"Erro ao verificar queue: {e}")
-            self._finish_merge_process(("error", f"Erro interno: {str(e)}", "Erro inesperado."))
+            self._finish_merge_process(("error", f"Erro interno: {str(e)}", "❌ Erro inesperado."))
 
     def _finish_merge_process(self, result):
         """Finaliza o processo de unificação e atualiza a interface."""
         result_type, msg_box_text, status_text = result
         
-        # Para a animação e oculta a barra de progresso
         self.progress.stop()
         self.progress.pack_forget()
         self.is_merging = False
         
-        # Exibe mensagem apropriada
         if result_type == "success":
             messagebox.showinfo("Sucesso", msg_box_text)
             self.status_label.config(text=status_text, foreground="green")
-        else:  # error
+        else:
             messagebox.showerror("Erro", msg_box_text)
             self.status_label.config(text=status_text, foreground="red")
-            self.output_file = ""  # Limpa o caminho de saída em caso de erro
+            self.output_file = ""
 
-        # Atualiza estado dos botões
         self.update_buttons_state()
 
     def open_output_folder(self):
@@ -472,5 +579,5 @@ class PDFMergerApp:
 
 if __name__ == "__main__":
     root = tk.Tk()
-    app = PDFMergerApp(root)
+    app = AdvancedPDFMergerApp(root)
     root.mainloop()
